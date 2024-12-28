@@ -1,5 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-// InitBoard.h
+// InitBoard.cpp
 //
 // Board specific initialization
 //
@@ -34,15 +34,14 @@
 // History:
 //
 // 20240504 Created
-//
+// 20241228 Simplified for Kassel
 // ToDo:
 // -
 //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-#ifndef INIT_BOARD_H
-#define INIT_BOARD_H
+#include "InitBoard.h"
 
-void initBoard(void);
-
-#endif // INIT_BOARD_H
+void initBoard(void)
+{
+}
