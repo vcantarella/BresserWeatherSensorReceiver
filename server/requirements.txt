@@ -1,0 +1,5 @@
+fastapi
+paho-mqtt
+schedule
+uvicorn
+duckdb

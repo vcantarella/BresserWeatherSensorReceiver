@@ -65,14 +65,84 @@
 #include <WiFi.h>
 #include <time.h>
 #include <RadioLib.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
 
-const char ssid[] = "MagentaWLAN-7NZA";
-const char password[] = "53647155881209484065";
-WiFiClient net;
-// NTP server
-const char* ntpServer = "de.pool.ntp.org";
-const long  gmtOffset_sec = 0;
-const int   daylightOffset_sec = 3600;
+#define JSON_BUFFER_SIZE 300
+
+bool publishWeatherData(weather_data_t *ws, PubSubClient& mqtt_client, const char* mqtt_topic) {
+    if (!mqtt_client.connected()) {
+        Serial.println("MQTT client not connected");
+        return false;
+    }
+
+    StaticJsonDocument<300> doc;
+    char time_str[26];
+    strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", &ws->timestamp);
+    
+    doc["sensor_id"] = ws->sensor_id;
+    doc["temperature"] = ws->temp_c;
+    doc["humidity"] = ws->humidity;
+    doc["wind_speed"] = ws->wind_avg_meter_sec;
+    doc["wind_direction"] = ws->wind_direction_deg;
+    doc["rain"] = ws->rain_mm;
+    doc["rain_delta"] = ws->delta_rain;
+    doc["light_lux"] = ws->light_lux;
+    doc["timestamp"] = time_str;
+    doc["delta_t"] = ws->delta_t;
+    
+    char buffer[JSON_BUFFER_SIZE];
+    serializeJson(doc, buffer);
+    
+    bool published = mqtt_client.publish(mqtt_topic, buffer);
+    
+    if (!published) {
+        Serial.println("Failed to publish MQTT message");
+    }
+    
+    return published;
+}
+
+// Add MQTT Configuration
+const char* ssid = "MagentaWLAN-7NZA";
+const char* password = "53647155881209484065";
+const char* mqtt_server = "192.168.2.30"; // Computer's IP
+const int mqtt_port = 1883;
+const char* mqtt_topic = "weather/raw";
+
+WiFiClient espClient;
+PubSubClient mqtt_client(espClient);
+
+void setup_wifi() {
+    delay(10);
+    Serial.println("Connecting to WiFi...");
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("\nWiFi connected");
+}
+
+void setup_mqtt() {
+    mqtt_client.setServer(mqtt_server, mqtt_port);
+    while (!mqtt_client.connected()) {
+        Serial.println("Connecting to MQTT...");
+        if (mqtt_client.connect("ESP32WeatherClient")) {
+            Serial.println("MQTT connected");
+        } else {
+            Serial.println("failed, rc=");
+            Serial.print(mqtt_client.state());
+            delay(5000);
+        }
+    }
+}
+
+// NTP Server configuration for Germany
+const char* ntpServer = "de.pool.ntp.org";  // German NTP server pool
+const long  gmtOffset_sec = 3600;           // UTC+1 (German standard time)
+const int   daylightOffset_sec = 3600;      // +1 hour for summer time
+
 // Flag to indicate that a packet was received
 volatile bool receivedFlag = false;
 SX1276 radio = new Module(PIN_RECEIVER_CS, PIN_RECEIVER_IRQ, PIN_RECEIVER_RST, PIN_RECEIVER_GPIO);
@@ -91,30 +161,20 @@ void setFlag(void)
     receivedFlag = true;
 }
 
+float previous_rain = 0.0; // we initialize a rain variable that is updated as new data arrives.
+// The data arrives as the accumulated rain and we want the rain difference.
+struct tm previous_time; // we compare the delta t for the rain intensity.
+
 void setup() 
 {
     Serial.begin(115200);
     Serial.setDebugOutput(true);
     Serial.printf("Starting execution...\n");
     // Connect to WiFi
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(1000);
-        Serial.println("Connecting to WiFi...");
-    }
-    Serial.println("Connected to WiFi");
-
-    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-    // Wait for time to be set
-    struct tm timeinfo;
-    if (!getLocalTime(&timeinfo)) {
-        Serial.println("Failed to obtain time");
-        return;
-    }
-    Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+    setup_wifi();
+    setup_mqtt();
+    
     //initialize wifi access
-
-    // SX1276 radio = new Module(PIN_RECEIVER_CS, PIN_RECEIVER_IRQ, PIN_RECEIVER_RST, PIN_RECEIVER_GPIO);
     double frequency_offset = 0.0;
     double frequency = 868.3 + frequency_offset;
     log_d("Setting frequency to %f MHz", 868.3 + frequency_offset);
@@ -153,6 +213,14 @@ void setup()
         while (true)
             delay(10);
     }
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+    // Wait for time to be set
+    if (!getLocalTime(&previous_time)) {
+        Serial.println("Failed to obtain time");
+        return;
+    }
+    Serial.println(&previous_time, "%A, %B %d %Y %H:%M:%S");
+
     log_d("%s Setup complete - awaiting incoming messages...", RECEIVER_CHIP);
     float rssi = radio.getRSSI();
 
@@ -171,6 +239,10 @@ void setup()
 
 void loop() 
 {   
+    if (!mqtt_client.connected()) {
+        setup_mqtt();
+    }
+    mqtt_client.loop();
 
     // Tries to receive radio message (non-blocking) and to decode it.
     // Timeout occurs after a small multiple of expected time-on-air.
@@ -206,6 +278,34 @@ void loop()
                     } else {
                         batt = batt_low;
                     }
+
+                    //further processing of the data.
+                    // calculate the time difference between the current and the previous data
+                    struct tm current_time;
+                    if (!getLocalTime(&current_time)) {
+                        Serial.println("Failed to obtain time");
+                        return;
+                    }
+                    else {
+                        Serial.println(&current_time, "%A, %B %d %Y %H:%M:%S");
+                        ws.timestamp = current_time;
+                        ws.delta_t = difftime(mktime(&current_time), mktime(&previous_time));
+                    }
+                    
+                    // calculate the rain difference
+                    if (previous_rain <= 0.0) { // the first time we receive data
+                        ws.delta_rain = -99.9;
+                    }
+                    else {
+                        if  (ws.rain_mm < previous_rain) { // the rain gauge has been reset
+                            previous_rain = 0.0;
+                            ws.delta_rain = ws.rain_mm;
+                        }
+                        else {
+                            ws.delta_rain = ws.rain_mm - previous_rain;
+                            previous_rain = ws.rain_mm;
+                        }
+                    }
                 
                     Serial.printf("Id: [%8X] Typ: [%X] Ch: [%d] St: [%d] Bat: [%-3s] RSSI: [%6.1fdBm] \n",
                         static_cast<int> (ws.sensor_id),
@@ -237,10 +337,10 @@ void loop()
                         Serial.printf("Wmax: [--.-m/s] Wavg: [--.-m/s] Wdir: [---.-deg] ");
                     }
                     if (ws.rain_ok) {
-                        Serial.printf("Rain: [%7.1fmm] ",  
+                        Serial.printf("Total Rain: [%7.1fmm] ",  
                             ws.rain_mm);
                     } else {
-                        Serial.printf("Rain: [-----.-mm] "); 
+                        Serial.printf("Total Rain: [-----.-mm] "); 
                     }
                     if (ws.uv_ok) {
                         Serial.printf("UVidx: [%2.1f] ",
@@ -257,6 +357,21 @@ void loop()
                         Serial.printf("Light: [--.-klx] ");
                     }
                     Serial.printf("\n");
+
+                    // Publish to MQTT and check result
+                    // Publish to MQTT and check result
+                    bool published = publishWeatherData(&ws, mqtt_client, mqtt_topic);
+                    
+                    if (published) {
+                        log_d("Data published successfully to MQTT");
+                        previous_time = current_time;
+                        previous_rain = ws.rain_mm;
+                    } else {
+                        log_e("Failed to publish data to MQTT");
+                        // Optionally retry or handle error
+                    }
+
+
                     } // if (decode_res == DECODE_OK)
                     else
                     {
@@ -276,11 +391,6 @@ void loop()
                 log_d("%s Receive failed: [%d]\n", RECEIVER_CHIP, state);
             }
         }
-        int decode_status = decoderPayload(&recvData[1], sizeof(recvData) - 1, &ws);
 
-        if (decode_status == DECODE_OK) {
-            
-        
-        } // if (decode_status == DECODE_OK)
     delay(1000);
 } // loop()

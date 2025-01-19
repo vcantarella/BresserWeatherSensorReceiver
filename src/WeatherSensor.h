@@ -10,7 +10,7 @@
  * Based on the Bresser 7-in-1 weather sensor implementation by Matthias Prinke.
  */
 struct WeatherData {
-            time_t  timestamp;           //!< timestamp
+            struct tm  timestamp;           //!< timestamp
             uint32_t sensor_id;          //!< sensor ID
             float    temp_c;            //!< temperature in degC
             float    light_klx;         //!< Light KLux (only 7-in-1)
@@ -20,6 +20,8 @@ struct WeatherData {
             float    wind_direction_deg;  //!< wind direction in deg
             float    wind_gust_meter_sec; //!< wind speed (gusts) in m/s
             float    wind_avg_meter_sec;  //!< wind speed (avg)   in m/s
+            float    delta_t;           //!< time difference in seconds
+            float    delta_rain;        //!< rain difference in mm
             uint8_t  humidity;                //!< humidity in %
             bool     temp_ok;         //!< temperature o.k. (only 6-in-1)
             bool     humidity_ok;     //!< humidity o.k.
