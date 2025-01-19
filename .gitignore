@@ -13,5 +13,6 @@ server/data/
 server/data/processed_weather.duckdb
 server/data/raw_weather.duckdb
 server/.venv/
+server/passwords.py
 server/database/__pycache__/
 src/Secrets.h

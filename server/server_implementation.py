@@ -10,7 +10,7 @@ import logging
 import uvicorn
 import json
 from data_processor import get_raw_data, resample_data, save_processed_data
-
+import passwords
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -110,18 +110,13 @@ def run_scheduler():
         time.sleep(60)
 
 def connect_mqtt():
-    def on_connect(client, userdata, flags, rc):
-        if rc == 0:
+    def on_connect(client, userdata, flags, reason_code, properties):
+        if reason_code.is_successful():
             logger.info("Connected to MQTT Broker!")
             client.subscribe(MQTT_TOPIC)
             logger.info(f"Subscribed to {MQTT_TOPIC}")
         else:
-            logger.error(f"Failed to connect, return code {rc}\n")
-            logger.error("0: Connection successful\n")
-            logger.error("-1: Connection refused - incorrect protocol version\n")
-            logger.error("-2: Connection refused - invalid client identifier\n")
-            logger.error("-3: Connection refused - server unavailable\n")
-            logger.error("-4: Connection refused - bad username or password\n")
+            logger.error(f"Failed to connect, reason code: {reason_code}")
 
     def on_message(client, userdata, msg):
         try:
@@ -153,10 +148,16 @@ def connect_mqtt():
         except Exception as e:
             logger.error(f"Error processing message: {e}")
 
-    # Add client ID to avoid connection refused
-    client = mqtt_client.Client(client_id="weather_server", protocol=mqtt_client.MQTTv311)
+    # Create client with protocol v5
+    client = mqtt_client.Client(
+        client_id="weather_server",
+        protocol=mqtt_client.MQTTv5
+    )
+    
+    # Set callbacks
     client.on_connect = on_connect
     client.on_message = on_message
+    client.username_pw_set("weather_server", passwords.mqtt_password)
 
     try:
         client.connect(MQTT_BROKER, MQTT_PORT, 60)

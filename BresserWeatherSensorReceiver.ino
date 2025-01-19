@@ -129,7 +129,7 @@ void setup_mqtt() {
     mqtt_client.setServer(mqtt_server, mqtt_port);
     while (!mqtt_client.connected()) {
         Serial.println("Connecting to MQTT...");
-        if (mqtt_client.connect("ESP32WeatherClient")) {
+        if (mqtt_client.connect("MDF", MQTT_USER, MQTT_PASSWORD)) {
             Serial.println("MQTT connected");
         } else {
             Serial.println("failed, rc=");
