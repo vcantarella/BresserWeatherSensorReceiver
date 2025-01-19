@@ -10,5 +10,7 @@ dist/
 *.egg-info/
 .pytest_cache/
 server/data/
+server/data/processed_weather.duckdb
+server/data/raw_weather.duckdb
 server/.venv/
 server/database/__pycache__/
