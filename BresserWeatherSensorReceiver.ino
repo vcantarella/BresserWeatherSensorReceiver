@@ -67,6 +67,7 @@
 #include <RadioLib.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include "src/Secrets.h"
 
 #define JSON_BUFFER_SIZE 300
 
@@ -104,10 +105,10 @@ bool publishWeatherData(weather_data_t *ws, PubSubClient& mqtt_client, const cha
 }
 
 // Add MQTT Configuration
-const char* ssid = "MagentaWLAN-7NZA";
-const char* password = "53647155881209484065";
-const char* mqtt_server = "192.168.2.30"; // Computer's IP
-const int mqtt_port = 1883;
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
+const char* mqtt_server = MQTT_SERVER; // Computer's IP
+const int mqtt_port = MQTT_PORT;
 const char* mqtt_topic = "weather/raw";
 
 WiFiClient espClient;
