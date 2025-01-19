@@ -9,3 +9,6 @@ build/
 dist/
 *.egg-info/
 .pytest_cache/
+server/data/
+server/.venv/
+server/database/__pycache__/
