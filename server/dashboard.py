@@ -75,4 +75,6 @@ def update_graphs(n, start_date, end_date):
     return temp_fig, humidity_fig, wind_fig, rain_fig, light_fig
 
 if __name__ == '__main__':
-    app.run_server(debug=True, port=8050)
+    app.run_server(debug=True,
+                   host='0.0.0.0',
+                   port=8050)
