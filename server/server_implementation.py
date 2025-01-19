@@ -110,13 +110,13 @@ def run_scheduler():
         time.sleep(60)
 
 def connect_mqtt():
-    def on_connect(client, userdata, flags, reason_code, properties):
-        if reason_code.is_successful():
+    def on_connect(client, userdata, flags, rc):  # Fixed signature for MQTTv311
+        if rc == 0:
             logger.info("Connected to MQTT Broker!")
             client.subscribe(MQTT_TOPIC)
             logger.info(f"Subscribed to {MQTT_TOPIC}")
         else:
-            logger.error(f"Failed to connect, reason code: {reason_code}")
+            logger.error(f"Failed to connect, rc: {rc}")
 
     def on_message(client, userdata, msg):
         try:
@@ -151,7 +151,7 @@ def connect_mqtt():
     # Create client with protocol v5
     client = mqtt_client.Client(
         client_id="weather_server",
-        protocol=mqtt_client.MQTTv5
+        protocol=mqtt_client.MQTTv311
     )
     
     # Set callbacks
