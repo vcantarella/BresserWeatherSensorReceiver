@@ -91,6 +91,7 @@ bool publishWeatherData(weather_data_t *ws, PubSubClient& mqtt_client, const cha
     doc["light_lux"] = ws->light_lux;
     doc["timestamp"] = time_str;
     doc["delta_t"] = ws->delta_t;
+    doc["battery_ok"] = ws->battery_ok;
     
     char buffer[JSON_BUFFER_SIZE];
     serializeJson(doc, buffer);
@@ -141,8 +142,8 @@ void setup_mqtt() {
 
 // NTP Server configuration for Germany
 const char* ntpServer = "de.pool.ntp.org";  // German NTP server pool
-const long  gmtOffset_sec = 3600;           // UTC+1 (German standard time)
-const int   daylightOffset_sec = 3600;      // +1 hour for summer time
+const long  gmtOffset_sec = 0;           // UTC 
+const int   daylightOffset_sec = 0;      //
 
 // Flag to indicate that a packet was received
 volatile bool receivedFlag = false;
@@ -240,6 +241,9 @@ void setup()
 
 void loop() 
 {   
+    if (WiFi.status() != WL_CONNECTED) {
+        setup_wifi();
+    }
     if (!mqtt_client.connected()) {
         setup_mqtt();
     }
